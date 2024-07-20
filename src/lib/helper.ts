@@ -1,5 +1,5 @@
 export const generateMarkdown = (scrapedData: any, url: string) => {
-  if (!scrapedData) return "";
+  if (!scrapedData || !url) return "";
 
   let markdown = `# Documentation Structure for ${url}\n\n`;
 

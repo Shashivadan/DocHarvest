@@ -10,6 +10,7 @@ interface Subsection {
 interface Section {
   title: string;
   link: string;
+  leadingParagraph: string;
   subsections: Subsection[];
 }
 
@@ -67,8 +68,15 @@ export async function POST(req: NextRequest) {
             const section: Section = {
               title,
               link: new URL(link, url).toString(),
+              leadingParagraph: "",
               subsections: [],
             };
+
+            // Extract leading paragraph
+            const $nextElement = $li.next();
+            if ($nextElement.is("p")) {
+              section.leadingParagraph = $nextElement.text().trim();
+            }
 
             const $subList = $li.children("ul");
             if ($subList.length > 0) {

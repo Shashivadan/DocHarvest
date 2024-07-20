@@ -1,4 +1,5 @@
 "use client";
+import Clipboard from "./Clipboard";
 import axios, { isAxiosError } from "axios";
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -18,9 +19,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Loader2 } from "lucide-react";
+import { Loader2, Copy } from "lucide-react";
 import { ApiResponse, Section } from "@/lib/types";
-
+import { toast } from "sonner";
 import { generateMarkdown } from "@/lib/helper";
 
 const DocScraperUI = () => {
@@ -122,28 +123,37 @@ const DocScraperUI = () => {
                 {scrapedData.sections.map((section: Section, index: any) => (
                   <AccordionItem value={`section-${index}`} key={index}>
                     <AccordionTrigger>{section.title}</AccordionTrigger>
-                    <AccordionContent className=" bg-zinc-800 p-2 rounded-2xl l-2">
-                      <a
-                        href={section.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 mt-2 hover:underline"
-                      >
-                        {section.link}
-                      </a>
+                    <AccordionContent className=" bg-zinc-800 p-2 rounded l-2 mb-2 flex  flex-col justify-between ">
+                      <div className=" flex  justify-between">
+                        <a
+                          href={section.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 mt-2 hover:underline"
+                        >
+                          {section.link}
+                        </a>
+                        <Clipboard url={section.link} />
+                      </div>
                       {section.subsections.length > 0 && (
                         <ul className="list-disc pl-6 mt-2">
                           {section.subsections.map(
                             (subsection: any, subIndex: any) => (
-                              <li key={subIndex}>
-                                <a
-                                  href={subsection.link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-500 hover:underline"
-                                >
-                                  {subsection.title}
-                                </a>
+                              <li
+                                key={subIndex}
+                                className="flex flex-col gap-2"
+                              >
+                                <div className=" flex  justify-between ">
+                                  <a
+                                    href={subsection.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-500 hover:underline mb-2"
+                                  >
+                                    {subsection.title}
+                                  </a>
+                                  <Clipboard url={subsection.title} />
+                                </div>
                               </li>
                             )
                           )}
