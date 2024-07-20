@@ -10,7 +10,7 @@ interface Subsection {
 interface Section {
   title: string;
   link: string;
-  leadingParagraph: string;
+  paragraphs: string[];
   subsections: Subsection[];
 }
 
@@ -39,10 +39,7 @@ export async function POST(req: NextRequest) {
 
     if (!url) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "URL is required",
-        },
+        { success: false, message: "URL is required" },
         { status: 400 }
       );
     }
@@ -53,51 +50,68 @@ export async function POST(req: NextRequest) {
 
     const scrapedData: ScrapedData = { sections: [] };
 
-    $("ul").each((_, ul) => {
-      const $ul = $(ul);
-      const directChildren = $ul.children("li");
+    // Extract main content paragraphs
+    const mainContentParagraphs: string[] = [];
+    $("main, article, .content, #content")
+      .find("p")
+      .each((_, p) => {
+        const paragraphText = $(p).text().trim();
+        if (paragraphText) {
+          mainContentParagraphs.push(paragraphText);
+        }
+      });
 
-      if (directChildren.length > 1 && directChildren.find("a").length > 0) {
-        directChildren.each((_, li) => {
-          const $li = $(li);
-          const $mainLink = $li.children("a").first();
-          const title = $mainLink.text().trim();
-          const link = $mainLink.attr("href");
+    $("h1, h2, h3").each((_, heading) => {
+      const $heading = $(heading);
+      const title = $heading.text().trim();
+      const $link = $heading.find("a").first();
+      const link = $link.attr("href") || "";
 
-          if (title && link && isLikelyDocumentationLink(title)) {
-            const section: Section = {
-              title,
-              link: new URL(link, url).toString(),
-              leadingParagraph: "",
-              subsections: [],
-            };
+      if (title && (link || isLikelyDocumentationLink(title))) {
+        const section: Section = {
+          title,
+          link: link ? new URL(link, url).toString() : "",
+          paragraphs: [],
+          subsections: [],
+        };
 
-            // Extract leading paragraph
-            const $nextElement = $li.next();
-            if ($nextElement.is("p")) {
-              section.leadingParagraph = $nextElement.text().trim();
+        // Extract paragraphs following the heading
+        let $next = $heading.next();
+        while ($next.length && !$next.is("h1, h2, h3")) {
+          if ($next.is("p")) {
+            const paragraphText = $next.text().trim();
+            if (paragraphText) {
+              section.paragraphs.push(paragraphText);
             }
-
-            const $subList = $li.children("ul");
-            if ($subList.length > 0) {
-              $subList.find("li > a").each((_, subA) => {
-                const $subA = $(subA);
-                const subTitle = $subA.text().trim();
-                const subLink = $subA.attr("href");
-                if (subTitle && subLink) {
-                  section.subsections.push({
-                    title: subTitle,
-                    link: new URL(subLink, url).toString(),
-                  });
-                }
-              });
-            }
-
-            scrapedData.sections.push(section);
+          } else if ($next.is("ul, ol")) {
+            $next.find("li > a").each((_, subA) => {
+              const $subA = $(subA);
+              const subTitle = $subA.text().trim();
+              const subLink = $subA.attr("href");
+              if (subTitle && subLink) {
+                section.subsections.push({
+                  title: subTitle,
+                  link: new URL(subLink, url).toString(),
+                });
+              }
+            });
           }
-        });
+          $next = $next.next();
+        }
+
+        scrapedData.sections.push(section);
       }
     });
+
+    // If no sections were found, use the main content paragraphs
+    if (scrapedData.sections.length === 0 && mainContentParagraphs.length > 0) {
+      scrapedData.sections.push({
+        title: "Main Content",
+        link: url,
+        paragraphs: mainContentParagraphs,
+        subsections: [],
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -105,12 +119,8 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error(error);
-
     return NextResponse.json(
-      {
-        success: false,
-        message: "An error occurred while scraping",
-      },
+      { success: false, message: "An error occurred while scraping" },
       { status: 500 }
     );
   }

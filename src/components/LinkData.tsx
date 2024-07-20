@@ -35,7 +35,7 @@ const DocScraperUI = () => {
       setError("An error occurred while making file ready");
       return;
     }
-    const markdown = generateMarkdown(scrapedData, url);
+    const markdown = generateMarkdown(scrapedData);
     const blob = new Blob([markdown], { type: "text/markdown" });
     const link = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -53,9 +53,12 @@ const DocScraperUI = () => {
     // setScrapedData(null);
 
     try {
-      const { data } = await axios.post<Promise<ApiResponse>>("/api/scraper", {
-        url,
-      });
+      const { data } = await axios.post<Promise<ApiResponse>>(
+        "/api/markScraper",
+        {
+          url,
+        }
+      );
       if (data) {
         // @ts-ignore
         setScrapedData(data.data);
