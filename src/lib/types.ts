@@ -13,7 +13,5 @@ export interface Section {
 
 export interface ApiResponse {
   success: boolean;
-  data: {
-    sections: Section[];
-  };
+  sections: Section[];
 }

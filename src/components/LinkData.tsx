@@ -21,11 +21,30 @@ import {
 import { Loader2 } from "lucide-react";
 import { ApiResponse, Section } from "@/lib/types";
 
+import { generateMarkdown } from "@/lib/helper";
+
 const DocScraperUI = () => {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [scrapedData, setScrapedData] = useState<ApiResponse | null>();
+
+  const downloadMarkdown = () => {
+    if (!scrapedData || !url) {
+      setError("An error occurred while making file ready");
+      return;
+    }
+    const markdown = generateMarkdown(scrapedData, url);
+    const blob = new Blob([markdown], { type: "text/markdown" });
+    const link = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = link;
+    a.download = "documentation_structure.md";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const submithandler = async () => {
     setIsLoading(true);
@@ -47,6 +66,7 @@ const DocScraperUI = () => {
         setError(
           error.response?.data.message || "An error occurred while scraping"
         );
+        setScrapedData(null);
         return;
       }
       setError("Some Thing want worng");
@@ -69,12 +89,22 @@ const DocScraperUI = () => {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
             />
-            <Button onClick={submithandler} disabled={isLoading}>
+            <Button
+              className="  bg-zinc-900 rounded-md"
+              onClick={submithandler}
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 "Scrape"
               )}
+            </Button>
+            <Button
+              onClick={downloadMarkdown}
+              className=" bg-zinc-900 rounded-lg"
+            >
+              Markdown
             </Button>
           </div>
 
@@ -92,12 +122,12 @@ const DocScraperUI = () => {
                 {scrapedData.sections.map((section: Section, index: any) => (
                   <AccordionItem value={`section-${index}`} key={index}>
                     <AccordionTrigger>{section.title}</AccordionTrigger>
-                    <AccordionContent>
+                    <AccordionContent className=" bg-zinc-800 p-2 rounded-2xl l-2">
                       <a
                         href={section.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline"
+                        className="text-blue-500 mt-2 hover:underline"
                       >
                         {section.link}
                       </a>
