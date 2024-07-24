@@ -1,36 +1,87 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
 import { NextRequest, NextResponse } from "next/server";
+import puppeteer from "puppeteer";
 
-interface Subsection {
-  title: string;
-  link: string;
-}
-
-interface Section {
-  title: string;
-  link: string;
-  paragraphs: string[];
-  subsections: Subsection[];
+interface ContentItem {
+  type: "heading" | "paragraph";
+  level?: number; // For headings
+  content: string;
 }
 
 interface ScrapedData {
-  sections: Section[];
+  title: string;
+  content: ContentItem[];
+  links: { text: string; url: string }[];
 }
 
-function isLikelyDocumentationLink(text: string): boolean {
-  const docKeywords = [
-    "guide",
-    "doc",
-    "api",
-    "reference",
-    "manual",
-    "tutorial",
-    "learn",
-    "howto",
-    "faq",
-  ];
-  return docKeywords.some((keyword) => text.toLowerCase().includes(keyword));
+async function scrapeFullPageContent(url: string): Promise<ScrapedData> {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.goto(url, { waitUntil: "networkidle0" });
+
+  const scrapedData = await page.evaluate(() => {
+    const title = document.title;
+
+    function getContentItems(element: Element): ContentItem[] {
+      const items: ContentItem[] = [];
+      const paragraphContents: string[] = [];
+      const walker = document.createTreeWalker(
+        element,
+        NodeFilter.SHOW_ELEMENT,
+        {
+          acceptNode: (node) => {
+            if (node.nodeName.match(/^H[1-6]$/) || node.nodeName === "P") {
+              return NodeFilter.FILTER_ACCEPT;
+            }
+            return NodeFilter.FILTER_SKIP;
+          },
+        }
+      );
+
+      let currentNode: Node | null;
+      while ((currentNode = walker.nextNode())) {
+        const elem = currentNode as Element;
+        const content = elem.textContent?.trim() || "";
+        if (content) {
+          if (elem.nodeName.match(/^H[1-6]$/)) {
+            // Push accumulated paragraphs before adding a heading
+            if (paragraphContents.length > 0) {
+              items.push({
+                type: "paragraph",
+                content: paragraphContents.join(" "),
+              });
+              paragraphContents.length = 0; // Clear the array
+            }
+            items.push({
+              type: "heading",
+              level: parseInt(elem.nodeName.charAt(1)),
+              content: content,
+            });
+          } else if (elem.nodeName === "P") {
+            paragraphContents.push(content);
+          }
+        }
+      }
+      // Push remaining paragraphs if any
+      if (paragraphContents.length > 0) {
+        items.push({
+          type: "paragraph",
+          content: paragraphContents.join(" "),
+        });
+      }
+      return items;
+    }
+
+    const content = getContentItems(document.body);
+
+    const links = Array.from(document.querySelectorAll("a"))
+      .map((a) => ({ text: a.textContent?.trim() || "", url: a.href }))
+      .filter((link) => link.text && link.url);
+
+    return { title, content, links };
+  });
+
+  await browser.close();
+  return scrapedData;
 }
 
 export async function POST(req: NextRequest) {
@@ -44,74 +95,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const response = await axios.get(url);
-    const html = response.data;
-    const $ = cheerio.load(html);
-
-    const scrapedData: ScrapedData = { sections: [] };
-
-    // Extract main content paragraphs
-    const mainContentParagraphs: string[] = [];
-    $("main, article, .content, #content")
-      .find("p")
-      .each((_, p) => {
-        const paragraphText = $(p).text().trim();
-        if (paragraphText) {
-          mainContentParagraphs.push(paragraphText);
-        }
-      });
-
-    $("h1, h2, h3").each((_, heading) => {
-      const $heading = $(heading);
-      const title = $heading.text().trim();
-      const $link = $heading.find("a").first();
-      const link = $link.attr("href") || "";
-
-      if (title && (link || isLikelyDocumentationLink(title))) {
-        const section: Section = {
-          title,
-          link: link ? new URL(link, url).toString() : "",
-          paragraphs: [],
-          subsections: [],
-        };
-
-        // Extract paragraphs following the heading
-        let $next = $heading.next();
-        while ($next.length && !$next.is("h1, h2, h3")) {
-          if ($next.is("p")) {
-            const paragraphText = $next.text().trim();
-            if (paragraphText) {
-              section.paragraphs.push(paragraphText);
-            }
-          } else if ($next.is("ul, ol")) {
-            $next.find("li > a").each((_, subA) => {
-              const $subA = $(subA);
-              const subTitle = $subA.text().trim();
-              const subLink = $subA.attr("href");
-              if (subTitle && subLink) {
-                section.subsections.push({
-                  title: subTitle,
-                  link: new URL(subLink, url).toString(),
-                });
-              }
-            });
-          }
-          $next = $next.next();
-        }
-
-        scrapedData.sections.push(section);
-      }
-    });
-
-    // If no sections were found, use the main content paragraphs
-    if (scrapedData.sections.length === 0 && mainContentParagraphs.length > 0) {
-      scrapedData.sections.push({
-        title: "Main Content",
-        link: url,
-        paragraphs: mainContentParagraphs,
-        subsections: [],
-      });
-    }
+    const scrapedData = await scrapeFullPageContent(url);
 
     return NextResponse.json({
       success: true,
